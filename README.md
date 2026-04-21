@@ -2,7 +2,7 @@
 
 This is a Golang app that provides an API for processing orders. It is meant to be used in conjunction with the store-admin app.
 
-It is a simple REST API written with the Gin framework that allows you to process orders from a RabbitMQ queue and send them to a MongoDB database.
+It is a simple REST API written with the Gin framework that allows you to process orders from  RabbitMQ queue and send them to a MongoDB database.
 
 ## Prerequisites
 
