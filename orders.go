@@ -24,7 +24,6 @@ type Item struct {
 type OrderRepo interface {
 	GetPendingOrders() ([]Order, error)
 	GetOrder(id string) (Order, error)
-	InsertOrders(orders []Order) error
 	UpdateOrder(order Order) error
 }
 

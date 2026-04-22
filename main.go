@@ -78,24 +78,23 @@ func fetchOrders(c *gin.Context) {
 		return
 	}
 
-	// Process each order by updating status
+	// Process each pending order
 	for _, order := range orders {
-		order.Status = "Processing"
+		order.Status = Processing
 		err := client.repo.UpdateOrder(order)
 		if err != nil {
 			log.Printf("Failed to update order %s to Processing: %s", order.OrderID, err)
 			continue
 		}
 
-		order.Status = "Completed"
+		order.Status = Complete
 		err = client.repo.UpdateOrder(order)
 		if err != nil {
-			log.Printf("Failed to update order %s to Completed: %s", order.OrderID, err)
+			log.Printf("Failed to update order %s to Complete: %s", order.OrderID, err)
 			continue
 		}
 	}
 
-	// Return current pending orders fetched for processing
 	c.IndentedJSON(http.StatusOK, orders)
 }
 

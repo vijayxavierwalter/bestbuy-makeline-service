@@ -14,18 +14,16 @@ type MongoDBOrderRepo struct {
 	db *mongo.Collection
 }
 
-func NewMongoDBOrderRepo(mongoUri string, mongoDb string, mongoCollection string, mongoUser string, mongoPassword string) (*MongoDBOrderRepo, error) {
-	// create a context
+func NewMongoDBOrderRepo(mongoURI string, mongoDB string, mongoCollection string, mongoUser string, mongoPassword string) (*MongoDBOrderRepo, error) {
 	ctx := context.Background()
 
-	// create a mongo client
 	var clientOptions *options.ClientOptions
 	if mongoUser == "" && mongoPassword == "" {
-		clientOptions = options.Client().ApplyURI(mongoUri)
+		clientOptions = options.Client().ApplyURI(mongoURI)
 	} else {
-		clientOptions = options.Client().ApplyURI(mongoUri).
+		clientOptions = options.Client().ApplyURI(mongoURI).
 			SetAuth(options.Credential{
-				AuthSource: mongoDb,
+				AuthSource: mongoDB,
 				Username:   mongoUser,
 				Password:   mongoPassword,
 			}).
@@ -42,15 +40,12 @@ func NewMongoDBOrderRepo(mongoUri string, mongoDb string, mongoCollection string
 	if err != nil {
 		log.Printf("failed to ping database: %s", err)
 		return nil, err
-	} else {
-		log.Printf("pong from database")
 	}
 
-	// get a handle for the collection
-	collection := mongoClient.Database(mongoDb).Collection(mongoCollection)
-	//defer collection.Database().Client().Disconnect(context.Background())
+	log.Printf("pong from database")
 
-	return &MongoDBOrderRepo{collection}, nil
+	collection := mongoClient.Database(mongoDB).Collection(mongoCollection)
+	return &MongoDBOrderRepo{db: collection}, nil
 }
 
 func (r *MongoDBOrderRepo) GetPendingOrders() ([]Order, error) {
@@ -59,18 +54,11 @@ func (r *MongoDBOrderRepo) GetPendingOrders() ([]Order, error) {
 	var orders []Order
 	cursor, err := r.db.Find(ctx, bson.M{"status": Pending})
 	if err != nil {
-		log.Printf("Failed to find records: %s", err)
+		log.Printf("Failed to find pending orders: %s", err)
 		return nil, err
 	}
 	defer cursor.Close(ctx)
 
-	// Check if there was an error during iteration
-	if err := cursor.Err(); err != nil {
-		log.Printf("Failed to find records: %s", err)
-		return nil, err
-	}
-
-	// Iterate over the cursor and decode each document
 	for cursor.Next(ctx) {
 		var pendingOrder Order
 		if err := cursor.Decode(&pendingOrder); err != nil {
@@ -80,18 +68,21 @@ func (r *MongoDBOrderRepo) GetPendingOrders() ([]Order, error) {
 		orders = append(orders, pendingOrder)
 	}
 
+	if err := cursor.Err(); err != nil {
+		log.Printf("Cursor iteration error: %s", err)
+		return nil, err
+	}
+
 	return orders, nil
 }
 
 func (r *MongoDBOrderRepo) GetOrder(id string) (Order, error) {
-	var ctx = context.TODO()
+	ctx := context.TODO()
 
-	filter := bson.D{{Key: "orderid", Value: bson.D{{Key: "$eq", Value: id}}}}
-
-	singleResult := r.db.FindOne(ctx, filter)
+	filter := bson.M{"orderid": id}
 
 	var order Order
-	err := singleResult.Decode(&order)
+	err := r.db.FindOne(ctx, filter).Decode(&order)
 	if err != nil {
 		log.Printf("Failed to decode order: %s", err)
 		return order, err
@@ -100,48 +91,23 @@ func (r *MongoDBOrderRepo) GetOrder(id string) (Order, error) {
 	return order, nil
 }
 
-func (r *MongoDBOrderRepo) InsertOrders(orders []Order) error {
+func (r *MongoDBOrderRepo) UpdateOrder(order Order) error {
 	ctx := context.TODO()
 
-	var ordersInterface []interface{}
-	for _, o := range orders {
-		ordersInterface = append(ordersInterface, interface{}(o))
-	}
-
-	if len(ordersInterface) == 0 {
-		log.Printf("No orders to insert into database")
-	} else {
-		// Insert orders
-		insertResult, err := r.db.InsertMany(ctx, ordersInterface)
-		if err != nil {
-			log.Printf("Failed to insert order: %s", err)
-			return err
-		}
-
-		log.Printf("Inserted %v documents into database\n", len(insertResult.InsertedIDs))
-	}
-	return nil
-}
-
-func (r *MongoDBOrderRepo) UpdateOrder(order Order) error {
-	var ctx = context.TODO()
-
-	filter := bson.D{{Key: "orderid", Value: bson.D{{Key: "$eq", Value: order.OrderID}}}}
-
-	// Update the order
-	log.Printf("Updating order: %v", order)
-	updateResult, err := r.db.UpdateMany(
-		ctx,
-		filter,
-		bson.D{
-			{Key: "$set", Value: bson.D{{Key: "status", Value: order.Status}}},
+	filter := bson.M{"orderid": order.OrderID}
+	update := bson.M{
+		"$set": bson.M{
+			"status": order.Status,
 		},
-	)
+	}
+
+	log.Printf("Updating order: %v", order)
+	updateResult, err := r.db.UpdateOne(ctx, filter, update)
 	if err != nil {
 		log.Printf("Failed to update order: %s", err)
 		return err
 	}
 
-	log.Printf("Matched %v documents and updated %v documents.\n", updateResult.MatchedCount, updateResult.ModifiedCount)
+	log.Printf("Matched %v document and updated %v document.", updateResult.MatchedCount, updateResult.ModifiedCount)
 	return nil
 }
